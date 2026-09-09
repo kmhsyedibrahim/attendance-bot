@@ -19,7 +19,7 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 const EMPLOYEES = {
-  '918300635880': { name: 'Test', tab: 'RAS' },
+  '919XXXXXXXXX': { name: 'Test', tab: 'RAS' }, // ← unga real number podunga
 };
 
 const COLUMN_MAP = {
@@ -30,13 +30,21 @@ const COLUMN_MAP = {
 };
 // -----------------------------
 
+// Health check route - browser-la open pannalam test panna
+app.get('/', (req, res) => {
+  res.send('Attendance bot is running ✅');
+});
+
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
+  console.log('Webhook verification attempt:', { mode, token });
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('Webhook verified successfully ✅');
     res.status(200).send(challenge);
   } else {
+    console.log('Webhook verification FAILED ❌');
     res.sendStatus(403);
   }
 });
@@ -116,17 +124,27 @@ async function writeTime(tab, row, column, timeStr) {
 }
 
 app.post('/webhook', async (req, res) => {
+  console.log('Webhook POST received:', JSON.stringify(req.body));
   res.sendStatus(200);
 
   const entry = req.body.entry?.[0]?.changes?.[0]?.value;
   const message = entry?.messages?.[0];
-  if (!message) return;
+  if (!message) {
+    console.log('No message found in payload');
+    return;
+  }
 
   const from = message.from;
+  console.log('Message from:', from);
   const employee = EMPLOYEES[from];
-  if (!employee) return;
+
+  if (!employee) {
+    console.log('Unknown number, not in EMPLOYEES list:', from);
+    return;
+  }
 
   if (message.type === 'text') {
+    console.log('Sending buttons to', from);
     await sendButtons(from);
     return;
   }
