@@ -57,31 +57,31 @@ async function sendButtons(to) {
       to,
       type: 'interactive',
       interactive: {
-        type: 'button',
-        body: { text: 'Mark your attendance:' },
-        action: {
-          buttons: [
-            { type: 'reply', reply: { id: 'morning_in', title: 'Morning In' } },
-            { type: 'reply', reply: { id: 'morning_out', title: 'Morning Out' } },
-          ],
+        type: 'list',
+        header: {
+          type: 'text',
+          text: 'Attendance',
         },
-      },
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
-  await axios.post(
-    `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { text: 'Evening:' },
+        body: {
+          text: 'Select Shift',
+        },
         action: {
-          buttons: [
-            { type: 'reply', reply: { id: 'evening_in', title: 'Evening In' } },
-            { type: 'reply', reply: { id: 'evening_out', title: 'Evening Out' } },
+          button: 'Select Shift',
+          sections: [
+            {
+              title: 'Morning Shift',
+              rows: [
+                { id: 'morning_in', title: 'Morning In' },
+                { id: 'morning_out', title: 'Morning Out' },
+              ],
+            },
+            {
+              title: 'Evening Shift',
+              rows: [
+                { id: 'evening_in', title: 'Evening In' },
+                { id: 'evening_out', title: 'Evening Out' },
+              ],
+            },
           ],
         },
       },
@@ -144,13 +144,13 @@ app.post('/webhook', async (req, res) => {
   }
 
   if (message.type === 'text') {
-    console.log('Sending buttons to', from);
+    console.log('Sending options to', from);
     await sendButtons(from);
     return;
   }
 
-  if (message.type === 'interactive' && message.interactive.type === 'button_reply') {
-    const buttonId = message.interactive.button_reply.id;
+  if (message.type === 'interactive') {
+    const buttonId = message.interactive.button_reply?.id || message.interactive.list_reply?.id;
     const column = COLUMN_MAP[buttonId];
     if (!column) return;
 
