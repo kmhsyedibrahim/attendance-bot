@@ -101,8 +101,12 @@ async function sendText(to, text) {
 async function findTodayRow(tab) {
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${tab}!A2:A100` });
   const rows = res.data.values || [];
+  
+  // Indian Standard Time (IST) படி இன்றைய தேதி:
   const today = new Date();
-  const target = `${today.getMonth() + 1}/${today.getDate()}`;
+  const options = { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' };
+  const target = today.toLocaleDateString('en-US', options); // எ.கா: "9/9"
+
   for (let i = 0; i < rows.length; i++) {
     if ((rows[i][0] || '').includes(target)) return i + 2;
   }
@@ -160,8 +164,15 @@ app.post('/webhook', async (req, res) => {
     const existing = await getCellValue(employee.tab, row, column);
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
+    // சரியான இந்திய நேரம் (IST - Asia/Kolkata):
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const timeStr = now.toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
     await writeTime(employee.tab, row, column, timeStr);
     await sendText(from, `✅ ${employee.name}, recorded at ${timeStr}`);
   }
