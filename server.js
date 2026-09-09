@@ -63,7 +63,7 @@ async function sendButtons(to) {
           text: 'Attendance',
         },
         body: {
-          text: 'Select Shift',
+          text: ' ', // 'Select Shift' நீக்கப்பட்டு காலியாக மாற்றப்பட்டுள்ளது
         },
         action: {
           button: 'Select Shift',
