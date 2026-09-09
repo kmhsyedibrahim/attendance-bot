@@ -19,7 +19,7 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 const EMPLOYEES = {
-  '918300635880': { name: 'Test', tab: 'RAS' }, // ← unga real number podunga
+  '918300635880': { name: 'Rasheed', tab: 'RAS' }, // ← unga real number podunga
 };
 
 const COLUMN_MAP = {
