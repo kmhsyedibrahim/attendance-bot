@@ -71,15 +71,15 @@ async function sendButtons(to) {
             {
               title: 'Morning Shift',
               rows: [
-                { id: 'morning_in', title: 'Morning In' },
-                { id: 'morning_out', title: 'Morning Out' },
+                { id: 'morning_in', title: 'In' },
+                { id: 'morning_out', title: 'Out' },
               ],
             },
             {
               title: 'Evening Shift',
               rows: [
-                { id: 'evening_in', title: 'Evening In' },
-                { id: 'evening_out', title: 'Evening Out' },
+                { id: 'evening_in', title: 'In' },
+                { id: 'evening_out', title: 'Out' },
               ],
             },
           ],
@@ -102,10 +102,9 @@ async function findTodayRow(tab) {
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${tab}!A2:A100` });
   const rows = res.data.values || [];
   
-  // Indian Standard Time (IST) படி இன்றைய தேதி:
   const today = new Date();
   const options = { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' };
-  const target = today.toLocaleDateString('en-US', options); // எ.கா: "9/9"
+  const target = today.toLocaleDateString('en-US', options);
 
   for (let i = 0; i < rows.length; i++) {
     if ((rows[i][0] || '').includes(target)) return i + 2;
@@ -164,7 +163,6 @@ app.post('/webhook', async (req, res) => {
     const existing = await getCellValue(employee.tab, row, column);
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
-    // சரியான இந்திய நேரம் (IST - Asia/Kolkata):
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', {
       timeZone: 'Asia/Kolkata',
