@@ -19,7 +19,11 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 const EMPLOYEES = {
-  '918300635880': { name: 'Rasheed', tab: 'RAS' }, // ← unga real number podunga
+  '917826055489': { name: 'Irfan', tab: 'IRF' },
+  '918778274487': { name: 'Rasheed', tab: 'RAS' },
+  '917010171009': { name: 'Jaffer', tab: 'JAF' },
+  '919042084992': { name: 'Harris', tab: 'HAR' },
+  '918300635880': { name: 'KSI', tab: 'KSI' },
 };
 
 const COLUMN_MAP = {
