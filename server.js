@@ -58,12 +58,8 @@ async function sendButtons(to) {
       type: 'interactive',
       interactive: {
         type: 'list',
-        header: {
-          type: 'text',
-          text: 'Attendance',
-        },
         body: {
-          text: ' ', // 'Select Shift' நீக்கப்பட்டு காலியாக மாற்றப்பட்டுள்ளது
+          text: 'Attendance',
         },
         action: {
           button: 'Select Shift',
