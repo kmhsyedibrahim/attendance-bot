@@ -59,7 +59,7 @@ async function sendButtons(to) {
       interactive: {
         type: 'list',
         body: {
-          text: 'Attendance',
+          text: '*Attendance*',
         },
         action: {
           button: 'Select Shift',
