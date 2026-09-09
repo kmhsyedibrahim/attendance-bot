@@ -167,7 +167,7 @@ app.post('/webhook', async (req, res) => {
     });
 
     await writeTime(employee.tab, row, column, timeStr);
-    await sendText(from, `✅ Attendance Marked: ${employee.name} (${timeStr})`);
+    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`);
   }
 });
 
