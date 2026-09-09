@@ -19,7 +19,7 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 const EMPLOYEES = {
-  '918300635880': { name: 'Rasheed', tab: 'RAS' }, // ← unga real number podunga
+  '918300635880': { name: 'Test', tab: 'RAS' }, // ← unga real number podunga
 };
 
 const COLUMN_MAP = {
@@ -69,17 +69,12 @@ async function sendButtons(to) {
           button: 'Select Shift',
           sections: [
             {
-              title: 'Morning Shift',
+              title: 'Select Shift',
               rows: [
-                { id: 'morning_in', title: 'In' },
-                { id: 'morning_out', title: 'Out' },
-              ],
-            },
-            {
-              title: 'Evening Shift',
-              rows: [
-                { id: 'evening_in', title: 'In' },
-                { id: 'evening_out', title: 'Out' },
+                { id: 'morning_in', title: 'Morning In' },
+                { id: 'morning_out', title: 'Morning Out' },
+                { id: 'evening_in', title: 'Evening In' },
+                { id: 'evening_out', title: 'Evening Out' },
               ],
             },
           ],
@@ -168,7 +163,7 @@ app.post('/webhook', async (req, res) => {
       timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
 
     await writeTime(employee.tab, row, column, timeStr);
