@@ -152,7 +152,7 @@ app.post('/webhook', async (req, res) => {
     const column = COLUMN_MAP[buttonId];
     if (!column) return;
 
-    const row = `await findTodayRow(employee.tab);` // (Existing code logic preserved)
+    const row = await findTodayRow(employee.tab);
     if (!row) return sendText(from, "⚠️ Today's row not found in sheet. Contact admin.");
 
     const existing = await getCellValue(employee.tab, row, column);
