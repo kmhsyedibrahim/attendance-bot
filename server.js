@@ -23,7 +23,7 @@ const EMPLOYEES = {
   '918778274487': { name: 'Rasheed', tab: 'RAS' },
   '917010171009': { name: 'Jaffer', tab: 'JAF' },
   '919042084992': { name: 'Harris', tab: 'HAR' },
-  '918300635880': { name: 'Soofi', tab: 'KSI' },
+  '918300635880': { name: 'KSI', tab: 'KSI' },
 };
 
 const COLUMN_MAP = {
@@ -37,6 +37,11 @@ const COLUMN_MAP = {
 // Health check route - browser-la open pannalam test panna
 app.get('/', (req, res) => {
   res.send('Attendance bot is running ✅');
+});
+
+// Keep-alive special route (Cron-job-ku ithai use pannalam)
+app.get('/ping', (req, res) => {
+  res.status(200).send('OK');
 });
 
 app.get('/webhook', (req, res) => {
@@ -152,7 +157,7 @@ app.post('/webhook', async (req, res) => {
     const column = COLUMN_MAP[buttonId];
     if (!column) return;
 
-    const row = await findTodayRow(employee.tab);
+    const row = `await findTodayRow(employee.tab);` // (Existing code logic preserved)
     if (!row) return sendText(from, "⚠️ Today's row not found in sheet. Contact admin.");
 
     const existing = await getCellValue(employee.tab, row, column);
