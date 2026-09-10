@@ -39,11 +39,6 @@ app.get('/', (req, res) => {
   res.send('Attendance bot is running ✅');
 });
 
-// Keep-alive special route (Cron-job-ku ithai use pannalam)
-app.get('/ping', (req, res) => {
-  res.status(200).send('OK');
-});
-
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
