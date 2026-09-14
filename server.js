@@ -51,8 +51,8 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// 3 பட்டன்கள் கொண்ட மெனு (Half, Leave, Select Shift)
-async function sendButtons(to) {
+// 1. Half, Leave பட்டன்கள் மற்றும் Select Shift லிஸ்ட்டைத் திறக்க வழி செய்யும் மெனு
+async function sendMainOptions(to) {
   await axios.post(
     `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
     {
@@ -62,7 +62,7 @@ async function sendButtons(to) {
       interactive: {
         type: 'button',
         body: {
-          text: '*Attendance*\nPlease select your option:',
+          text: '*Attendance*\nPlease choose an option:',
         },
         action: {
           buttons: [
@@ -86,7 +86,7 @@ async function sendButtons(to) {
   );
 }
 
-// ஷிப்வைத் தேர்ந்தெடுக்க லிஸ்ட் மெனு
+// 2. Select Shift-ஐக் கிளிக் செய்தால் விரிவாக ஷிப்ட் நேரங்களைக் காட்டும் பட்டியல் (List Message)
 async function sendShiftList(to) {
   await axios.post(
     `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
@@ -158,7 +158,7 @@ async function writeValue(tab, row, column, value) {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
 
-  const entry = req.body.entry?.[0]?.changes?.[0]?.value;
+  const entry = req.body.entry?.[0]?.changes?.,[0]?.value;
   const message = entry?.messages?.[0];
   if (!message) return;
 
@@ -167,16 +167,16 @@ app.post('/webhook', async (req, res) => {
 
   if (!employee) return;
 
-  // பயனர் எதாவது டெக்ஸ்ட் (எ.கா: Hi) அனுப்பினால் 3 பட்டன்கள் வரும்
+  // பயனர் எதாவது டெக்ஸ்ட் அனுப்பினால் மெயின் ஆப்ஷன்கள் (Half, Leave, Select Shift) போகும்
   if (message.type === 'text') {
-    await sendButtons(from);
+    await sendMainOptions(from);
     return;
   }
 
   if (message.type === 'interactive') {
     const buttonId = message.interactive.button_reply?.id || message.interactive.list_reply?.id;
 
-    // 'Select Shift' கிளிக் செய்தால் ஷிப்ட் பட்டியல் ஓப்பன் ஆகும்
+    // 'Select Shift' கிளிக் செய்யப்பட்டால் ஷிப்ட் பட்டியல் ஓப்பன் ஆகும்
     if (buttonId === 'select_shift_menu') {
       await sendShiftList(from);
       return;
@@ -190,7 +190,7 @@ app.post('/webhook', async (req, res) => {
 
     const existing = await getCellValue(employee.tab, row, column);
     
-    // Half அல்லது Leave-க்கு TRUE என ஷீட்டில் பதிவு செய்யப்படும்
+    // Half அல்லது Leave-ஐத் தேர்ந்தெடுத்தால் ஷீட்டில் TRUE எனப் பதிவாகும்
     if (buttonId === 'half' || buttonId === 'leave') {
       if (existing === 'TRUE') return sendText(from, `⚠️ Already marked.`);
       await writeValue(employee.tab, row, column, 'TRUE');
@@ -199,7 +199,7 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // மற்ற Time-களுக்கு (Morning In, Out போன்றவை)
+    // மற்ற ஷிப்ட் நேரங்களுக்கு (Morning In, Out போன்றவை)
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
     const now = new Date();
