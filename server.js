@@ -27,16 +27,15 @@ const EMPLOYEES = {
 };
 
 const COLUMN_MAP = {
-  morning_in: 'B',
-  morning_out: 'C',
   half: 'D',
   leave: 'E',
+  morning_in: 'B',
+  morning_out: 'C',
   evening_in: 'F',
   evening_out: 'G',
 };
 // -----------------------------
 
-// Health check route - browser-la open pannalam test panna
 app.get('/', (req, res) => {
   res.send('Attendance bot is running ✅');
 });
@@ -45,12 +44,9 @@ app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-  console.log('Webhook verification attempt:', { mode, token });
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verified successfully ✅');
     res.status(200).send(challenge);
   } else {
-    console.log('Webhook verification FAILED ❌');
     res.sendStatus(403);
   }
 });
@@ -68,18 +64,13 @@ async function sendButtons(to) {
           text: '*Attendance*',
         },
         action: {
-          button: 'Select Menu',
+          button: 'Select Shift',
           sections: [
             {
-              title: 'Leave Options',
+              title: 'Options',
               rows: [
                 { id: 'half', title: 'Half Day' },
                 { id: 'leave', title: 'Full Day Leave' },
-              ],
-            },
-            {
-              title: 'Shift Timings',
-              rows: [
                 { id: 'morning_in', title: 'Morning In' },
                 { id: 'morning_out', title: 'Morning Out' },
                 { id: 'evening_in', title: 'Evening In' },
