@@ -19,23 +19,24 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 const EMPLOYEES = {
-  '917826055489': { name: 'IRF', tab: 'IRF' },
-  '918778274487': { name: 'RAS', tab: 'RAS' },
-  '917010171009': { name: 'JAF', tab: 'JAF' },
-  '919042084992': { name: 'HAR', tab: 'HAR' },
+  '917826055489': { name: 'Irfan', tab: 'IRF' },
+  '918778274487': { name: 'Rasheed', tab: 'RAS' },
+  '917010171009': { name: 'Jaffer', tab: 'JAF' },
+  '919042084992': { name: 'Harris', tab: 'HAR' },
   '918300635880': { name: 'KSI', tab: 'KSI' },
 };
 
 const COLUMN_MAP = {
-  half: 'D',
-  leave: 'E',
   morning_in: 'B',
   morning_out: 'C',
+  half: 'D',
+  leave: 'E',
   evening_in: 'F',
   evening_out: 'G',
 };
 // -----------------------------
 
+// Health check route - browser-la open pannalam test panna
 app.get('/', (req, res) => {
   res.send('Attendance bot is running ✅');
 });
@@ -44,15 +45,17 @@ app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
+  console.log('Webhook verification attempt:', { mode, token });
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('Webhook verified successfully ✅');
     res.status(200).send(challenge);
   } else {
+    console.log('Webhook verification FAILED ❌');
     res.sendStatus(403);
   }
 });
 
-// ஒரே லிஸ்ட் மெனுவில் அனைத்து ஆப்ஷன்களும் (Half, Leave மற்றும் Shift Timings) வருவது போல
-async function sendAttendanceMenu(to) {
+async function sendButtons(to) {
   await axios.post(
     `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
     {
@@ -62,13 +65,13 @@ async function sendAttendanceMenu(to) {
       interactive: {
         type: 'list',
         body: {
-          text: '*Attendance Menu*\nPlease select your option below:',
+          text: '*Attendance*',
         },
         action: {
-          button: 'Select Option',
+          button: 'Select Menu',
           sections: [
             {
-              title: 'Leave & Status',
+              title: 'Leave Options',
               rows: [
                 { id: 'half', title: 'Half Day' },
                 { id: 'leave', title: 'Full Day Leave' },
@@ -118,34 +121,43 @@ async function getCellValue(tab, row, column) {
   return res.data.values ? res.data.values[0][0] : '';
 }
 
-async function writeValue(tab, row, column, value) {
+async function writeTime(tab, row, column, timeStr) {
   await sheets.spreadsheets.values.update({
     spreadsheetId: SHEET_ID,
     range: `${tab}!${column}${row}`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[value]] },
+    requestBody: { values: [[timeStr]] },
   });
 }
 
 app.post('/webhook', async (req, res) => {
+  console.log('Webhook POST received:', JSON.stringify(req.body));
   res.sendStatus(200);
 
   const entry = req.body.entry?.[0]?.changes?.[0]?.value;
   const message = entry?.messages?.[0];
-  if (!message) return;
+  if (!message) {
+    console.log('No message found in payload');
+    return;
+  }
 
   const from = message.from;
+  console.log('Message from:', from);
   const employee = EMPLOYEES[from];
 
-  if (!employee) return;
+  if (!employee) {
+    console.log('Unknown number, not in EMPLOYEES list:', from);
+    return;
+  }
 
   if (message.type === 'text') {
-    await sendAttendanceMenu(from);
+    console.log('Sending options to', from);
+    await sendButtons(from);
     return;
   }
 
   if (message.type === 'interactive') {
-    const buttonId = message.interactive.list_reply?.id;
+    const buttonId = message.interactive.button_reply?.id || message.interactive.list_reply?.id;
     const column = COLUMN_MAP[buttonId];
     if (!column) return;
 
@@ -153,10 +165,11 @@ app.post('/webhook', async (req, res) => {
     if (!row) return sendText(from, "⚠️ Today's row not found in sheet. Contact admin.");
 
     const existing = await getCellValue(employee.tab, row, column);
-    
+
+    // Half அல்லது Leave-ஐத் தேர்ந்தெடுத்தால் ஷீட்டில் TRUE எனப் பதிவாகும்
     if (buttonId === 'half' || buttonId === 'leave') {
       if (existing === 'TRUE') return sendText(from, `⚠️ Already marked.`);
-      await writeValue(employee.tab, row, column, 'TRUE');
+      await writeTime(employee.tab, row, column, 'TRUE');
       const label = buttonId === 'half' ? 'Half Day' : 'Full Day Leave';
       await sendText(from, `✅ Attendance Marked: ${employee.name} - *${label}*`);
       return;
@@ -172,7 +185,7 @@ app.post('/webhook', async (req, res) => {
       hour12: true,
     });
 
-    await writeValue(employee.tab, row, column, timeStr);
+    await writeTime(employee.tab, row, column, timeStr);
     await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`);
   }
 });
