@@ -69,7 +69,7 @@ async function sendButtons(to) {
             {
               title: 'Options',
               rows: [
-                { id: 'half', title: 'Half Day' },
+                { id: 'half', title: 'Half Day Leave' },
                 { id: 'leave', title: 'Full Day Leave' },
                 { id: 'morning_in', title: 'Morning In' },
                 { id: 'morning_out', title: 'Morning Out' },
@@ -161,7 +161,7 @@ app.post('/webhook', async (req, res) => {
     if (buttonId === 'half' || buttonId === 'leave') {
       if (existing === 'TRUE') return sendText(from, `⚠️ Already marked.`);
       await writeTime(employee.tab, row, column, 'TRUE');
-      const label = buttonId === 'half' ? 'Half Day' : 'Full Day Leave';
+      const label = buttonId === 'half' ? 'Half Day Leave' : 'Full Day Leave';
       await sendText(from, `✅ Attendance Marked: ${employee.name} - *${label}*`);
       return;
     }
