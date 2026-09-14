@@ -178,19 +178,17 @@ app.post('/webhook', async (req, res) => {
     // Restriction 1: If Full Day Leave is already marked, block everything
     const fullLeaveMarked = await getCellValue(employee.tab, row, 'E');
     if (fullLeaveMarked === 'TRUE') {
-      return sendText(from, `⚠️ You are on Full Day Leave today (${dateStr})!`);
+      return sendText(from, `⚠️ You are on *Full Day Leave* today (Date: *${dateStr}*)!`);
     }
 
     // Restriction 2: Half Day Leave Time-based restriction logic
     const halfLeaveMarked = await getCellValue(employee.tab, row, 'D');
     if (halfLeaveMarked === 'TRUE') {
-      // If Half Day was marked before 12 PM (Morning Half Leave), Evening In/Out is allowed, but Morning In/Out is blocked
       if (currentHour < 12 && (buttonId === 'morning_in' || buttonId === 'morning_out')) {
-        return sendText(from, `⚠️ You took Half Day Leave in the morning. Morning shift timings cannot be recorded.`);
+        return sendText(from, `⚠️ You took Half Day Leave in the *Morning*. Morning shift timings cannot be recorded.`);
       }
-      // If Half Day was marked at/after 1 PM (Afternoon Half Leave), Morning In/Out is allowed, but Evening In/Out is blocked
       if (currentHour >= 13 && (buttonId === 'evening_in' || buttonId === 'evening_out')) {
-        return sendText(from, `⚠️ You took Half Day Leave in the afternoon. Evening shift timings cannot be recorded.`);
+        return sendText(from, `⚠️ You took Half Day Leave in the *Afternoon*. Evening shift timings cannot be recorded.`);
       }
     }
 
