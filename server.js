@@ -19,7 +19,6 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 const EMPLOYEES = {
-  '917826055489': { name: 'Irfan', tab: 'IRF' },
   '918778274487': { name: 'Rasheed', tab: 'RAS' },
   '917010171009': { name: 'Jaffer', tab: 'JAF' },
   '919042084992': { name: 'Harris', tab: 'HAR' },
