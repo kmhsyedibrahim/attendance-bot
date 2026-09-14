@@ -27,10 +27,10 @@ const EMPLOYEES = {
 };
 
 const COLUMN_MAP = {
-  morning_in: 'B',
-  morning_out: 'C',
   half: 'D',
   leave: 'E',
+  morning_in: 'B',
+  morning_out: 'C',
   evening_in: 'F',
   evening_out: 'G',
 };
@@ -51,43 +51,8 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// 1. Half, Leave மற்றும் Select Shift ஆகிய 3 பட்டன்கள் கொண்ட மெனு
-async function sendMainOptions(to) {
-  await axios.post(
-    `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: {
-          text: '*Attendance*\nPlease choose an option:',
-        },
-        action: {
-          buttons: [
-            {
-              type: 'reply',
-              reply: { id: 'half', title: 'Half' },
-            },
-            {
-              type: 'reply',
-              reply: { id: 'leave', title: 'Leave' },
-            },
-            {
-              type: 'reply',
-              reply: { id: 'select_shift_menu', title: 'Select Shift' },
-            },
-          ],
-        },
-      },
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
-}
-
-// 2. Select Shift-ஐக் கிளிக் செய்தால் விரிவாக ஷிப்ட் நேரங்களைக் காட்டும் பட்டியல் (List Message)
-async function sendShiftList(to) {
+// ஒரே லிஸ்ட் மெனுவில் அனைத்து ஆப்ஷன்களும் (Half, Leave மற்றும் Shift Timings) வருவது போல
+async function sendAttendanceMenu(to) {
   await axios.post(
     `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
     {
@@ -97,11 +62,18 @@ async function sendShiftList(to) {
       interactive: {
         type: 'list',
         body: {
-          text: '*Select Your Shift*',
+          text: '*Attendance Menu*\nPlease select your option below:',
         },
         action: {
-          button: 'Choose Shift',
+          button: 'Select Option',
           sections: [
+            {
+              title: 'Leave & Status',
+              rows: [
+                { id: 'half', title: 'Half Day' },
+                { id: 'leave', title: 'Full Day Leave' },
+              ],
+            },
             {
               title: 'Shift Timings',
               rows: [
@@ -168,18 +140,12 @@ app.post('/webhook', async (req, res) => {
   if (!employee) return;
 
   if (message.type === 'text') {
-    await sendMainOptions(from);
+    await sendAttendanceMenu(from);
     return;
   }
 
   if (message.type === 'interactive') {
-    const buttonId = message.interactive.button_reply?.id || message.interactive.list_reply?.id;
-
-    if (buttonId === 'select_shift_menu') {
-      await sendShiftList(from);
-      return;
-    }
-
+    const buttonId = message.interactive.list_reply?.id;
     const column = COLUMN_MAP[buttonId];
     if (!column) return;
 
@@ -213,4 +179,3 @@ app.post('/webhook', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('✅ Server running on port ' + PORT));
-
