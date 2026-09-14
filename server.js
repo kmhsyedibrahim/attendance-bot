@@ -155,17 +155,22 @@ app.post('/webhook', async (req, res) => {
     const row = await findTodayRow(employee.tab);
     if (!row) return sendText(from, "⚠️ Today's row not found in sheet. Contact admin.");
 
-    const existing = await getCellValue(employee.tab, row, column);
-
-    // Half அல்லது Leave-ஐத் தேர்ந்தெடுத்தால் ஷீட்டில் TRUE எனப் பதிவாகும்
-    if (buttonId === 'half' || buttonId === 'leave') {
-      if (existing === 'TRUE') return sendText(from, `⚠️ Already marked.`);
-      await writeTime(employee.tab, row, column, 'TRUE');
-      const label = buttonId === 'half' ? 'Half Day Leave' : 'Full Day Leave';
-      await sendText(from, `✅ Attendance Marked: ${employee.name} - *${label}*`);
+    // Half Day Leave அல்லது Full Day Leave தேர்ந்தெடுக்கும்போது மற்றதை ஃபால்ஸ் (FALSE) ஆக்கும் லாஜிக்
+    if (buttonId === 'half') {
+      await writeTime(employee.tab, row, 'D', 'TRUE');  // Half-க்கு டிக்
+      await writeTime(employee.tab, row, 'E', 'FALSE'); // Full Leave-ஐக் காலியாக்கிவிடும்
+      await sendText(from, `✅ Attendance Marked: ${employee.name} - *Half Day Leave*`);
       return;
     }
 
+    if (buttonId === 'leave') {
+      await writeTime(employee.tab, row, 'E', 'TRUE');  // Full Leave-க்கு டிக்
+      await writeTime(employee.tab, row, 'D', 'FALSE'); // Half-ஐக் காலியாக்கிவிடும்
+      await sendText(from, `✅ Attendance Marked: ${employee.name} - *Full Day Leave*`);
+      return;
+    }
+
+    const existing = await getCellValue(employee.tab, row, column);
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
     const now = new Date();
