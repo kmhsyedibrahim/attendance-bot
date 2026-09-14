@@ -155,26 +155,36 @@ app.post('/webhook', async (req, res) => {
     const row = await findTodayRow(employee.tab);
     if (!row) return sendText(from, "⚠️ Today's row not found in sheet. Contact admin.");
 
-    // Half Day Leave அல்லது Full Day Leave தேர்ந்தெடுக்கும்போது மற்றதை ஃபால்ஸ் (FALSE) ஆக்கும் லாஜிக்
+    // இன்றைய தேதியைக் கண்டறிந்து மெசேஜில் காட்ட
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
+
+    // Handle Half Day Leave selection
     if (buttonId === 'half') {
-      await writeTime(employee.tab, row, 'D', 'TRUE');  // Half-க்கு டிக்
-      await writeTime(employee.tab, row, 'E', 'FALSE'); // Full Leave-ஐக் காலியாக்கிவிடும்
-      await sendText(from, `✅ Attendance Marked: ${employee.name} - *Half Day Leave*`);
+      await writeTime(employee.tab, row, 'D', 'TRUE');  
+      await writeTime(employee.tab, row, 'E', 'FALSE'); 
+      await sendText(from, `✅ Today's Leave Option Updated: *Half Day Leave* (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
 
+    // Handle Full Day Leave selection
     if (buttonId === 'leave') {
-      await writeTime(employee.tab, row, 'E', 'TRUE');  // Full Leave-க்கு டிக்
-      await writeTime(employee.tab, row, 'D', 'FALSE'); // Half-ஐக் காலியாக்கிவிடும்
-      await sendText(from, `✅ Attendance Marked: ${employee.name} - *Full Day Leave*`);
+      await writeTime(employee.tab, row, 'E', 'TRUE');  
+      await writeTime(employee.tab, row, 'D', 'FALSE'); 
+      await sendText(from, `✅ Today's Leave Option Updated: *Full Day Leave* (Date: ${dateStr}) - ${employee.name}`);
       return;
+    }
+
+    // Restriction: If Full Day Leave is already marked, prevent timing entry
+    const fullLeaveMarked = await getCellValue(employee.tab, row, 'E');
+    if (fullLeaveMarked === 'TRUE') {
+      return sendText(from, `⚠️ You are on Full Day Leave today (${dateStr})! Cannot record shift timings.`);
     }
 
     const existing = await getCellValue(employee.tab, row, column);
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', {
+    const timeStr = today.toLocaleTimeString('en-US', {
       timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
@@ -182,7 +192,7 @@ app.post('/webhook', async (req, res) => {
     });
 
     await writeTime(employee.tab, row, column, timeStr);
-    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`);
+    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}* (Date: ${dateStr})`);
   }
 });
 
