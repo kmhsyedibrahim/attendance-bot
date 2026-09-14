@@ -158,7 +158,7 @@ async function writeValue(tab, row, column, value) {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
 
-  const entry = req.body.entry?.[0]?.changes?.,[0]?.value;
+  const entry = req.body.entry?.[0]?.changes?.[0]?.value;
   const message = entry?.messages?.[0];
   if (!message) return;
 
@@ -167,7 +167,6 @@ app.post('/webhook', async (req, res) => {
 
   if (!employee) return;
 
-  // பயனர் எதாவது டெக்ஸ்ட் அனுப்பினால் மெயின் ஆப்ஷன்கள் (Half, Leave, Select Shift) போகும்
   if (message.type === 'text') {
     await sendMainOptions(from);
     return;
@@ -176,7 +175,6 @@ app.post('/webhook', async (req, res) => {
   if (message.type === 'interactive') {
     const buttonId = message.interactive.button_reply?.id || message.interactive.list_reply?.id;
 
-    // 'Select Shift' கிளிக் செய்யப்பட்டால் ஷிப்ட் பட்டியல் ஓப்பன் ஆகும்
     if (buttonId === 'select_shift_menu') {
       await sendShiftList(from);
       return;
@@ -190,7 +188,6 @@ app.post('/webhook', async (req, res) => {
 
     const existing = await getCellValue(employee.tab, row, column);
     
-    // Half அல்லது Leave-ஐத் தேர்ந்தெடுத்தால் ஷீட்டில் TRUE எனப் பதிவாகும்
     if (buttonId === 'half' || buttonId === 'leave') {
       if (existing === 'TRUE') return sendText(from, `⚠️ Already marked.`);
       await writeValue(employee.tab, row, column, 'TRUE');
@@ -199,7 +196,6 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // மற்ற ஷிப்ட் நேரங்களுக்கு (Morning In, Out போன்றவை)
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
     const now = new Date();
