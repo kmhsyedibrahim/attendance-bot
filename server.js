@@ -19,22 +19,23 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 const EMPLOYEES = {
-  '917826055489': { name: 'Irfan', tab: 'IRF' },
-  '918778274487': { name: 'Rasheed', tab: 'RAS' },
-  '917010171009': { name: 'Jaffer', tab: 'JAF' },
-  '919042084992': { name: 'Harris', tab: 'HAR' },
+  '917826055489': { name: 'IRF', tab: 'IRF' },
+  '918778274487': { name: 'RAS', tab: 'RAS' },
+  '917010171009': { name: 'JAF', tab: 'JAF' },
+  '919042084992': { name: 'HAR', tab: 'HAR' },
   '918300635880': { name: 'KSI', tab: 'KSI' },
 };
 
 const COLUMN_MAP = {
   morning_in: 'B',
   morning_out: 'C',
+  half: 'D',
+  leave: 'E',
   evening_in: 'F',
   evening_out: 'G',
 };
 // -----------------------------
 
-// Health check route - browser-la open pannalam test panna
 app.get('/', (req, res) => {
   res.send('Attendance bot is running ✅');
 });
@@ -43,17 +44,50 @@ app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-  console.log('Webhook verification attempt:', { mode, token });
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verified successfully ✅');
     res.status(200).send(challenge);
   } else {
-    console.log('Webhook verification FAILED ❌');
     res.sendStatus(403);
   }
 });
 
+// 3 பட்டன்கள் கொண்ட மெனு (Half, Leave, Select Shift)
 async function sendButtons(to) {
+  await axios.post(
+    `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: {
+          text: '*Attendance*\nPlease select your option:',
+        },
+        action: {
+          buttons: [
+            {
+              type: 'reply',
+              reply: { id: 'half', title: 'Half' },
+            },
+            {
+              type: 'reply',
+              reply: { id: 'leave', title: 'Leave' },
+            },
+            {
+              type: 'reply',
+              reply: { id: 'select_shift_menu', title: 'Select Shift' },
+            },
+          ],
+        },
+      },
+    },
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+}
+
+// ஷிப்வைத் தேர்ந்தெடுக்க லிஸ்ட் மெனு
+async function sendShiftList(to) {
   await axios.post(
     `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
     {
@@ -63,13 +97,13 @@ async function sendButtons(to) {
       interactive: {
         type: 'list',
         body: {
-          text: '*Attendance*',
+          text: '*Select Your Shift*',
         },
         action: {
-          button: 'Select Shift',
+          button: 'Choose Shift',
           sections: [
             {
-              title: 'Select Shift',
+              title: 'Shift Timings',
               rows: [
                 { id: 'morning_in', title: 'Morning In' },
                 { id: 'morning_out', title: 'Morning Out' },
@@ -112,43 +146,42 @@ async function getCellValue(tab, row, column) {
   return res.data.values ? res.data.values[0][0] : '';
 }
 
-async function writeTime(tab, row, column, timeStr) {
+async function writeValue(tab, row, column, value) {
   await sheets.spreadsheets.values.update({
     spreadsheetId: SHEET_ID,
     range: `${tab}!${column}${row}`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[timeStr]] },
+    requestBody: { values: [[value]] },
   });
 }
 
 app.post('/webhook', async (req, res) => {
-  console.log('Webhook POST received:', JSON.stringify(req.body));
   res.sendStatus(200);
 
   const entry = req.body.entry?.[0]?.changes?.[0]?.value;
   const message = entry?.messages?.[0];
-  if (!message) {
-    console.log('No message found in payload');
-    return;
-  }
+  if (!message) return;
 
   const from = message.from;
-  console.log('Message from:', from);
   const employee = EMPLOYEES[from];
 
-  if (!employee) {
-    console.log('Unknown number, not in EMPLOYEES list:', from);
-    return;
-  }
+  if (!employee) return;
 
+  // பயனர் எதாவது டெக்ஸ்ட் (எ.கா: Hi) அனுப்பினால் 3 பட்டன்கள் வரும்
   if (message.type === 'text') {
-    console.log('Sending options to', from);
     await sendButtons(from);
     return;
   }
 
   if (message.type === 'interactive') {
     const buttonId = message.interactive.button_reply?.id || message.interactive.list_reply?.id;
+
+    // 'Select Shift' கிளிக் செய்தால் ஷிப்ட் பட்டியல் ஓப்பன் ஆகும்
+    if (buttonId === 'select_shift_menu') {
+      await sendShiftList(from);
+      return;
+    }
+
     const column = COLUMN_MAP[buttonId];
     if (!column) return;
 
@@ -156,6 +189,17 @@ app.post('/webhook', async (req, res) => {
     if (!row) return sendText(from, "⚠️ Today's row not found in sheet. Contact admin.");
 
     const existing = await getCellValue(employee.tab, row, column);
+    
+    // Half அல்லது Leave-க்கு TRUE என ஷீட்டில் பதிவு செய்யப்படும்
+    if (buttonId === 'half' || buttonId === 'leave') {
+      if (existing === 'TRUE') return sendText(from, `⚠️ Already marked.`);
+      await writeValue(employee.tab, row, column, 'TRUE');
+      const label = buttonId === 'half' ? 'Half Day' : 'Full Day Leave';
+      await sendText(from, `✅ Attendance Marked: ${employee.name} - *${label}*`);
+      return;
+    }
+
+    // மற்ற Time-களுக்கு (Morning In, Out போன்றவை)
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
     const now = new Date();
@@ -166,7 +210,7 @@ app.post('/webhook', async (req, res) => {
       hour12: true,
     });
 
-    await writeTime(employee.tab, row, column, timeStr);
+    await writeValue(employee.tab, row, column, timeStr);
     await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`);
   }
 });
