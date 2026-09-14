@@ -51,7 +51,7 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// 1. Half, Leave பட்டன்கள் மற்றும் Select Shift லிஸ்ட்டைத் திறக்க வழி செய்யும் மெனு
+// 1. Half, Leave மற்றும் Select Shift ஆகிய 3 பட்டன்கள் கொண்ட மெனு
 async function sendMainOptions(to) {
   await axios.post(
     `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
@@ -213,3 +213,4 @@ app.post('/webhook', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('✅ Server running on port ' + PORT));
+
