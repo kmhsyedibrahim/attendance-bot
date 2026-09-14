@@ -155,8 +155,9 @@ app.post('/webhook', async (req, res) => {
     const row = await findTodayRow(employee.tab);
     if (!row) return sendText(from, "⚠️ Today's row not found in sheet. Contact admin.");
 
-    const today = new Date();
-    const dateStr = today.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
+    const currentHour = parseInt(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }));
 
     // Handle Half Day Leave selection
     if (buttonId === 'half') {
@@ -174,16 +175,29 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // Restriction: If Full Day Leave is already marked, prevent timing entry
+    // Restriction 1: If Full Day Leave is already marked, block everything
     const fullLeaveMarked = await getCellValue(employee.tab, row, 'E');
     if (fullLeaveMarked === 'TRUE') {
       return sendText(from, `⚠️ You are on Full Day Leave today (${dateStr})!`);
     }
 
+    // Restriction 2: Half Day Leave Time-based restriction logic
+    const halfLeaveMarked = await getCellValue(employee.tab, row, 'D');
+    if (halfLeaveMarked === 'TRUE') {
+      // If Half Day was marked before 12 PM (Morning Half Leave), Evening In/Out is allowed, but Morning In/Out is blocked
+      if (currentHour < 12 && (buttonId === 'morning_in' || buttonId === 'morning_out')) {
+        return sendText(from, `⚠️ You took Half Day Leave in the morning. Morning shift timings cannot be recorded.`);
+      }
+      // If Half Day was marked at/after 1 PM (Afternoon Half Leave), Morning In/Out is allowed, but Evening In/Out is blocked
+      if (currentHour >= 13 && (buttonId === 'evening_in' || buttonId === 'evening_out')) {
+        return sendText(from, `⚠️ You took Half Day Leave in the afternoon. Evening shift timings cannot be recorded.`);
+      }
+    }
+
     const existing = await getCellValue(employee.tab, row, column);
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
-    const timeStr = today.toLocaleTimeString('en-US', {
+    const timeStr = now.toLocaleTimeString('en-US', {
       timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
