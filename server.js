@@ -155,7 +155,6 @@ app.post('/webhook', async (req, res) => {
     const row = await findTodayRow(employee.tab);
     if (!row) return sendText(from, "⚠️ Today's row not found in sheet. Contact admin.");
 
-    // இன்றைய தேதியைக் கண்டறிந்து மெசேஜில் காட்ட
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
 
@@ -163,7 +162,7 @@ app.post('/webhook', async (req, res) => {
     if (buttonId === 'half') {
       await writeTime(employee.tab, row, 'D', 'TRUE');  
       await writeTime(employee.tab, row, 'E', 'FALSE'); 
-      await sendText(from, `✅ Today's Leave Option Updated: *Half Day Leave* (Date: ${dateStr}) - ${employee.name}`);
+      await sendText(from, `✅ *Half Day Leave* (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
 
@@ -171,14 +170,14 @@ app.post('/webhook', async (req, res) => {
     if (buttonId === 'leave') {
       await writeTime(employee.tab, row, 'E', 'TRUE');  
       await writeTime(employee.tab, row, 'D', 'FALSE'); 
-      await sendText(from, `✅ Today's Leave Option Updated: *Full Day Leave* (Date: ${dateStr}) - ${employee.name}`);
+      await sendText(from, `✅ *Full Day Leave* (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
 
     // Restriction: If Full Day Leave is already marked, prevent timing entry
     const fullLeaveMarked = await getCellValue(employee.tab, row, 'E');
     if (fullLeaveMarked === 'TRUE') {
-      return sendText(from, `⚠️ You are on Full Day Leave today (${dateStr})! Cannot record shift timings.`);
+      return sendText(from, `⚠️ You are on Full Day Leave today (${dateStr})!`);
     }
 
     const existing = await getCellValue(employee.tab, row, column);
