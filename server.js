@@ -21,8 +21,8 @@ const sheets = google.sheets({ version: 'v4', auth });
 const EMPLOYEES = {
   '918778274487': { name: 'Rasheed', tab: 'RAS' },
   '917010171009': { name: 'Jaffer', tab: 'JAF' },
-  '919042084992': { name: 'Harris', tab: 'HAR' },
-  '919894572851': { name: 'Soofi', tab: 'KSI' },
+  '919791702636': { name: 'Harris', tab: 'HAR' },
+  '918300635880': { name: 'Soofi', tab: 'KSI' },
 };
 
 const COLUMN_MAP = {
