@@ -164,7 +164,7 @@ app.post('/webhook', async (req, res) => {
     if (buttonId === 'morning_leave') {
       await writeTime(employee.tab, row, 'D', 'TRUE');  
       await writeTime(employee.tab, row, 'E', 'FALSE'); 
-      await sendText(from, `✅ *Half Day Leave* (Date: ${dateStr}) - ${employee.name}`);
+      await sendText(from, `✅ Half Day *Morning* Leave (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
 
@@ -172,7 +172,7 @@ app.post('/webhook', async (req, res) => {
     if (buttonId === 'evening_leave') {
       await writeTime(employee.tab, row, 'D', 'TRUE');  
       await writeTime(employee.tab, row, 'E', 'FALSE'); 
-      await sendText(from, `✅ *Half Day Leave* (Date: ${dateStr}) - ${employee.name}`);
+      await sendText(from, `✅ Half Day *Evening* Leave (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
 
@@ -212,7 +212,7 @@ app.post('/webhook', async (req, res) => {
     });
 
     await writeTime(employee.tab, row, column, timeStr);
-    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}* (Date: ${dateStr})`);
+    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`);
   }
 });
 
