@@ -22,11 +22,12 @@ const EMPLOYEES = {
   '918778274487': { name: 'Rasheed', tab: 'RAS' },
   '917010171009': { name: 'Jaffer', tab: 'JAF' },
   '919042084992': { name: 'Harris', tab: 'HAR' },
-  '918300635880': { name: 'Soofi', tab: 'KSI' },
+  '918300635880': { name: 'KSI', tab: 'KSI' },
 };
 
 const COLUMN_MAP = {
-  half: 'D',
+  morning_leave: 'D',
+  evening_leave: 'D',
   leave: 'E',
   morning_in: 'B',
   morning_out: 'C',
@@ -68,12 +69,13 @@ async function sendButtons(to) {
             {
               title: 'Options',
               rows: [
-                { id: 'half', title: 'Half Day Leave' },
-                { id: 'leave', title: 'Full Day Leave' },
                 { id: 'morning_in', title: 'Morning In' },
                 { id: 'morning_out', title: 'Morning Out' },
+                { id: 'morning_leave', title: 'Morning Leave' },
                 { id: 'evening_in', title: 'Evening In' },
                 { id: 'evening_out', title: 'Evening Out' },
+                { id: 'evening_leave', title: 'Evening Leave' },
+                { id: 'leave', title: 'Full Day Leave' },
               ],
             },
           ],
@@ -158,8 +160,16 @@ app.post('/webhook', async (req, res) => {
     const dateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
     const currentHour = parseInt(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }));
 
-    // Handle Half Day Leave selection
-    if (buttonId === 'half') {
+    // Handle Morning Leave selection
+    if (buttonId === 'morning_leave') {
+      await writeTime(employee.tab, row, 'D', 'TRUE');  
+      await writeTime(employee.tab, row, 'E', 'FALSE'); 
+      await sendText(from, `✅ *Half Day Leave* (Date: ${dateStr}) - ${employee.name}`);
+      return;
+    }
+
+    // Handle Evening Leave selection
+    if (buttonId === 'evening_leave') {
       await writeTime(employee.tab, row, 'D', 'TRUE');  
       await writeTime(employee.tab, row, 'E', 'FALSE'); 
       await sendText(from, `✅ *Half Day Leave* (Date: ${dateStr}) - ${employee.name}`);
@@ -180,7 +190,7 @@ app.post('/webhook', async (req, res) => {
       return sendText(from, `⚠️ You are on *Full Day Leave* today (Date: *${dateStr}*)!`);
     }
 
-    // Restriction 2: Half Day Leave Time-based restriction logic
+    // Restriction 2: Half Day Leave time-based / action-based restrictions
     const halfLeaveMarked = await getCellValue(employee.tab, row, 'D');
     if (halfLeaveMarked === 'TRUE') {
       if (currentHour < 12 && (buttonId === 'morning_in' || buttonId === 'morning_out')) {
