@@ -34,6 +34,9 @@ const COLUMN_MAP = {
   evening_in: 'F',
   evening_out: 'G',
 };
+
+// Store temporary selection state so we know which shift the location belongs to
+const pendingSelections = {};
 // -----------------------------
 
 app.get('/', (req, res) => {
@@ -86,6 +89,24 @@ async function sendButtons(to) {
   );
 }
 
+// Native One-Tap Location Request Message
+async function requestLocation(to) {
+  await axios.post(
+    `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'interactive',
+      interactive: {
+        type: 'location_request_message',
+        body: { text: '📍 Please tap the button below to share your current location for attendance:' },
+        action: { name: 'send_location' },
+      },
+    },
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
+}
+
 async function sendText(to, text) {
   await axios.post(
     `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
@@ -122,6 +143,16 @@ async function writeTime(tab, row, column, timeStr) {
   });
 }
 
+// Write Location to Column P
+async function writeLocation(tab, row, locationStr) {
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `${tab}!P${row}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[locationStr]] },
+  });
+}
+
 app.post('/webhook', async (req, res) => {
   console.log('Webhook POST received:', JSON.stringify(req.body));
   res.sendStatus(200);
@@ -142,14 +173,16 @@ app.post('/webhook', async (req, res) => {
     return;
   }
 
+  // 1. If user sends text, send shift selection list
   if (message.type === 'text') {
     console.log('Sending options to', from);
     await sendButtons(from);
     return;
   }
 
-  if (message.type === 'interactive') {
-    const buttonId = message.interactive.button_reply?.id || message.interactive.list_reply?.id;
+  // 2. If user selects options from the shift list
+  if (message.type === 'interactive' && message.interactive.type === 'list_reply') {
+    const buttonId = message.interactive.list_reply.id;
     const column = COLUMN_MAP[buttonId];
     if (!column) return;
 
@@ -160,7 +193,7 @@ app.post('/webhook', async (req, res) => {
     const dateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
     const currentHour = parseInt(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }));
 
-    // Handle Morning Leave selection
+    // Handle Leave options directly (No location needed for leaves if preferred, or you can add)
     if (buttonId === 'morning_leave') {
       await writeTime(employee.tab, row, 'D', 'TRUE');  
       await writeTime(employee.tab, row, 'E', 'FALSE'); 
@@ -168,7 +201,6 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // Handle Evening Leave selection
     if (buttonId === 'evening_leave') {
       await writeTime(employee.tab, row, 'D', 'TRUE');  
       await writeTime(employee.tab, row, 'E', 'FALSE'); 
@@ -176,7 +208,6 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // Handle Full Day Leave selection
     if (buttonId === 'leave') {
       await writeTime(employee.tab, row, 'E', 'TRUE');  
       await writeTime(employee.tab, row, 'D', 'FALSE'); 
@@ -184,13 +215,12 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
-    // Restriction 1: If Full Day Leave is already marked, block everything
+    // Restriction checks
     const fullLeaveMarked = await getCellValue(employee.tab, row, 'E');
     if (fullLeaveMarked === 'TRUE') {
       return sendText(from, `⚠️ You are on *Full Day Leave* today (Date: *${dateStr}*)!`);
     }
 
-    // Restriction 2: Half Day Leave time-based / action-based restrictions
     const halfLeaveMarked = await getCellValue(employee.tab, row, 'D');
     if (halfLeaveMarked === 'TRUE') {
       if (currentHour < 12 && (buttonId === 'morning_in' || buttonId === 'morning_out')) {
@@ -204,6 +234,27 @@ app.post('/webhook', async (req, res) => {
     const existing = await getCellValue(employee.tab, row, column);
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
+    // Save selection temporarily so we know what they chose when location arrives
+    pendingSelections[from] = { buttonId, column, row };
+
+    // Request Location now using native one-tap button
+    await requestLocation(from);
+    return;
+  }
+
+  // 3. If user shares location after clicking the location request button
+  if (message.type === 'location') {
+    const selection = pendingSelections[from];
+    if (!selection) {
+      return sendText(from, "⚠️ Please select your shift first by sending a message or clicking options.");
+    }
+
+    const { buttonId, column, row } = selection;
+    const employeeLat = message.location.latitude;
+    const employeeLon = message.location.longitude;
+    const locationStr = `Lat: ${employeeLat}, Lon: ${employeeLon}`;
+
+    const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', {
       timeZone: 'Asia/Kolkata',
       hour: '2-digit',
@@ -211,8 +262,16 @@ app.post('/webhook', async (req, res) => {
       hour12: true,
     });
 
+    // Write Time to appropriate shift column (B, C, F, G, etc.)
     await writeTime(employee.tab, row, column, timeStr);
-    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`);
+    
+    // Write Location to Column P
+    await writeLocation(employee.tab, row, locationStr);
+
+    // Clear temporary selection
+    delete pendingSelections[from];
+
+    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*\n📍 Location saved successfully!`);
   }
 });
 
