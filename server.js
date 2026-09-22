@@ -34,18 +34,11 @@ const COLUMN_MAP = {
   evening_in: 'F',
   evening_out: 'G',
 };
+// -----------------------------
 
-// Shift to Location Column Mapping (Morning In->P, Morning Out->Q, Evening In->R, Evening Out->S)
-const LOCATION_COLUMN_MAP = {
-  morning_in: 'P',
-  morning_out: 'Q',
-  evening_in: 'R',
-  evening_out: 'S',
-};
-
-const pendingSelections = {};
-
-app.get('/', (req, res) => res.send('Attendance bot is running ✅'));
+app.get('/', (req, res) => {
+  res.send('Attendance bot is running ✅');
+});
 
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
@@ -67,7 +60,9 @@ async function sendButtons(to) {
       type: 'interactive',
       interactive: {
         type: 'list',
-        body: { text: '*Attendance*' },
+        body: {
+          text: '*Attendance*',
+        },
         action: {
           button: 'Select Shift',
           sections: [
@@ -85,23 +80,6 @@ async function sendButtons(to) {
             },
           ],
         },
-      },
-    },
-    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-  );
-}
-
-async function requestLocation(to) {
-  await axios.post(
-    `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'interactive',
-      interactive: {
-        type: 'location_request_message',
-        body: { text: '📍 Please tap the button below to share your current location for attendance:' },
-        action: { name: 'send_location' },
       },
     },
     { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
@@ -130,25 +108,48 @@ async function findTodayRow(tab) {
   return null;
 }
 
-app.post('/webhook', async (req, res) => {
-  res.sendStatus(200); // Fast response to prevent webhook timeout
+async function getCellValue(tab, row, column) {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${tab}!${column}${row}` });
+  return res.data.values ? res.data.values[0][0] : '';
+}
 
-  const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-  if (!message) return;
+async function writeTime(tab, row, column, timeStr) {
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `${tab}!${column}${row}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[timeStr]] },
+  });
+}
+
+app.post('/webhook', async (req, res) => {
+  console.log('Webhook POST received:', JSON.stringify(req.body));
+  res.sendStatus(200);
+
+  const entry = req.body.entry?.[0]?.changes?.[0]?.value;
+  const message = entry?.messages?.[0];
+  if (!message) {
+    console.log('No message found in payload');
+    return;
+  }
 
   const from = message.from;
+  console.log('Message from:', from);
   const employee = EMPLOYEES[from];
-  if (!employee) return;
 
-  // 1. Text message -> Send shift selection menu
+  if (!employee) {
+    console.log('Unknown number, not in EMPLOYEES list:', from);
+    return;
+  }
+
   if (message.type === 'text') {
+    console.log('Sending options to', from);
     await sendButtons(from);
     return;
   }
 
-  // 2. Shift selection via Interactive List
-  if (message.type === 'interactive' && message.interactive.type === 'list_reply') {
-    const buttonId = message.interactive.list_reply.id;
+  if (message.type === 'interactive') {
+    const buttonId = message.interactive.button_reply?.id || message.interactive.list_reply?.id;
     const column = COLUMN_MAP[buttonId];
     if (!column) return;
 
@@ -159,110 +160,61 @@ app.post('/webhook', async (req, res) => {
     const dateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
     const currentHour = parseInt(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }));
 
-    // Handle Leave options directly
-    if (buttonId === 'morning_leave' || buttonId === 'evening_leave') {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
-        range: `${employee.tab}!D${row}:E${row}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [['TRUE', 'FALSE']] },
-      });
-      await sendText(from, `✅ Half Day Leave (Date: ${dateStr}) - ${employee.name}`);
+    // Handle Morning Leave selection
+    if (buttonId === 'morning_leave') {
+      await writeTime(employee.tab, row, 'D', 'TRUE');  
+      await writeTime(employee.tab, row, 'E', 'FALSE'); 
+      await sendText(from, `✅ Half Day *Morning* Leave (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
 
+    // Handle Evening Leave selection
+    if (buttonId === 'evening_leave') {
+      await writeTime(employee.tab, row, 'D', 'TRUE');  
+      await writeTime(employee.tab, row, 'E', 'FALSE'); 
+      await sendText(from, `✅ Half Day *Evening* Leave (Date: ${dateStr}) - ${employee.name}`);
+      return;
+    }
+
+    // Handle Full Day Leave selection
     if (buttonId === 'leave') {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
-        range: `${employee.tab}!D${row}:E${row}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [['FALSE', 'TRUE']] },
-      });
+      await writeTime(employee.tab, row, 'E', 'TRUE');  
+      await writeTime(employee.tab, row, 'D', 'FALSE'); 
       await sendText(from, `✅ *Full Day Leave* (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
 
-    // Fetch leave statuses and existing time data in parallel for speed
-    const [leaveRes, existingRes] = await Promise.all([
-      sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${employee.tab}!D${row}:E${row}` }),
-      sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `${employee.tab}!${column}${row}` })
-    ]);
-
-    const leaveValues = leaveRes.data.values?.[0] || ['FALSE', 'FALSE'];
-    if (leaveValues[1] === 'TRUE') {
+    // Restriction 1: If Full Day Leave is already marked, block everything
+    const fullLeaveMarked = await getCellValue(employee.tab, row, 'E');
+    if (fullLeaveMarked === 'TRUE') {
       return sendText(from, `⚠️ You are on *Full Day Leave* today (Date: *${dateStr}*)!`);
     }
 
-    if (leaveValues[0] === 'TRUE') {
+    // Restriction 2: Half Day Leave time-based / action-based restrictions
+    const halfLeaveMarked = await getCellValue(employee.tab, row, 'D');
+    if (halfLeaveMarked === 'TRUE') {
       if (currentHour < 12 && (buttonId === 'morning_in' || buttonId === 'morning_out')) {
-        return sendText(from, `⚠️ You took Half Day Leave in the *Morning*.`);
+        return sendText(from, `⚠️ You took Half Day Leave in the *Morning*. Morning shift timings cannot be recorded.`);
       }
       if (currentHour >= 13 && (buttonId === 'evening_in' || buttonId === 'evening_out')) {
-        return sendText(from, `⚠️ You took Half Day Leave in the *Afternoon*.`);
+        return sendText(from, `⚠️ You took Half Day Leave in the *Afternoon*. Evening shift timings cannot be recorded.`);
       }
     }
 
-    const existingTime = existingRes.data.values?.[0]?.[0] || '';
-    if (existingTime) {
-      return sendText(from, `⚠️ Already marked at ${existingTime}. Contact admin to fix.`);
-    }
+    const existing = await getCellValue(employee.tab, row, column);
+    if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
-    // Save selection temporarily to link with upcoming location
-    pendingSelections[from] = { buttonId, column, row };
-
-    // Request Location using native button
-    await requestLocation(from);
-    return;
-  }
-
-  // 3. Location received -> Save Time & Shift-specific Location concurrently
-  if (message.type === 'location') {
-    const selection = pendingSelections[from];
-    if (!selection) {
-      return sendText(from, "⚠️ Please select your shift first by sending a message.");
-    }
-
-    const { buttonId, column, row } = selection;
-    const locationCol = LOCATION_COLUMN_MAP[buttonId]; // P, Q, R, or S based on shift
-    const locationStr = `Lat: ${message.location.latitude}, Lon: ${message.location.longitude}`;
-    
-    const timeStr = new Date().toLocaleTimeString('en-US', {
+    const timeStr = now.toLocaleTimeString('en-US', {
       timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
       hour12: true,
     });
 
-    delete pendingSelections[from];
-
-    // Build update promises array dynamically
-    const updatePromises = [
-      sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
-        range: `${employee.tab}!${column}${row}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[timeStr]] },
-      }),
-      sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`)
-    ];
-
-    // If it's one of the shifts that requires location, add location update promise
-    if (locationCol) {
-      updatePromises.push(
-        sheets.spreadsheets.values.update({
-          spreadsheetId: SHEET_ID,
-          range: `${employee.tab}!${locationCol}${row}`,
-          valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[locationStr]] },
-        })
-      );
-    }
-
-    // Run all Google Sheet updates and WhatsApp response simultaneously for maximum speed
-    await Promise.all(updatePromises);
+    await writeTime(employee.tab, row, column, timeStr);
+    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`);
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('✅ Fast Server running on port ' + PORT));
-    
+app.listen(PORT, () => console.log('✅ Server running on port ' + PORT));
