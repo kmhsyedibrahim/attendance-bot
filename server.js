@@ -134,48 +134,19 @@ async function getCellValue(tab, row, column) {
   return res.data.values ? res.data.values[0][0] : '';
 }
 
-async function writeTime(tab, row, column, timeStr) {
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID,
-    range: `${tab}!${column}${row}`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[timeStr]] },
-  });
-}
-
-// Write Location to Column P
-async function writeLocation(tab, row, locationStr) {
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID,
-    range: `${tab}!P${row}`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values: [[locationStr]] },
-  });
-}
-
 app.post('/webhook', async (req, res) => {
-  console.log('Webhook POST received:', JSON.stringify(req.body));
   res.sendStatus(200);
 
   const entry = req.body.entry?.[0]?.changes?.[0]?.value;
   const message = entry?.messages?.[0];
-  if (!message) {
-    console.log('No message found in payload');
-    return;
-  }
+  if (!message) return;
 
   const from = message.from;
-  console.log('Message from:', from);
   const employee = EMPLOYEES[from];
-
-  if (!employee) {
-    console.log('Unknown number, not in EMPLOYEES list:', from);
-    return;
-  }
+  if (!employee) return;
 
   // 1. If user sends text, send shift selection list
   if (message.type === 'text') {
-    console.log('Sending options to', from);
     await sendButtons(from);
     return;
   }
@@ -193,24 +164,25 @@ app.post('/webhook', async (req, res) => {
     const dateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
     const currentHour = parseInt(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }));
 
-    // Handle Leave options directly (No location needed for leaves if preferred, or you can add)
-    if (buttonId === 'morning_leave') {
-      await writeTime(employee.tab, row, 'D', 'TRUE');  
-      await writeTime(employee.tab, row, 'E', 'FALSE'); 
-      await sendText(from, `✅ Half Day *Morning* Leave (Date: ${dateStr}) - ${employee.name}`);
-      return;
-    }
-
-    if (buttonId === 'evening_leave') {
-      await writeTime(employee.tab, row, 'D', 'TRUE');  
-      await writeTime(employee.tab, row, 'E', 'FALSE'); 
-      await sendText(from, `✅ Half Day *Evening* Leave (Date: ${dateStr}) - ${employee.name}`);
+    // Handle Leave options directly
+    if (buttonId === 'morning_leave' || buttonId === 'evening_leave') {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: `${employee.tab}!D${row}:E${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [['TRUE', 'FALSE']] },
+      });
+      await sendText(from, `✅ Half Day Leave (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
 
     if (buttonId === 'leave') {
-      await writeTime(employee.tab, row, 'E', 'TRUE');  
-      await writeTime(employee.tab, row, 'D', 'FALSE'); 
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: `${employee.tab}!D${row}:E${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [['FALSE', 'TRUE']] },
+      });
       await sendText(from, `✅ *Full Day Leave* (Date: ${dateStr}) - ${employee.name}`);
       return;
     }
@@ -249,7 +221,7 @@ app.post('/webhook', async (req, res) => {
       return sendText(from, "⚠️ Please select your shift first by sending a message or clicking options.");
     }
 
-    const { buttonId, column, row } = selection;
+    const { column, row } = selection;
     const employeeLat = message.location.latitude;
     const employeeLon = message.location.longitude;
     const locationStr = `Lat: ${employeeLat}, Lon: ${employeeLon}`;
@@ -262,18 +234,27 @@ app.post('/webhook', async (req, res) => {
       hour12: true,
     });
 
-    // Write Time to appropriate shift column (B, C, F, G, etc.)
-    await writeTime(employee.tab, row, column, timeStr);
-    
-    // Write Location to Column P
-    await writeLocation(employee.tab, row, locationStr);
-
-    // Clear temporary selection
     delete pendingSelections[from];
 
-    await sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*\n📍 Location saved successfully!`);
+    // Execute Google Sheets updates and WhatsApp reply concurrently for speed
+    await Promise.all([
+      sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: `${employee.tab}!${column}${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[timeStr]] },
+      }),
+      sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: `${employee.tab}!P${row}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[locationStr]] },
+      }),
+      sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`)
+    ]);
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('✅ Server running on port ' + PORT));
+  
