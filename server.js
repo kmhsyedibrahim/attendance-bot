@@ -35,9 +35,13 @@ const COLUMN_MAP = {
   evening_out: 'G',
 };
 
+// Store temporary selection state so we know which shift the location belongs to
 const pendingSelections = {};
+// -----------------------------
 
-app.get('/', (req, res) => res.send('Attendance bot is running ✅'));
+app.get('/', (req, res) => {
+  res.send('Attendance bot is running ✅');
+});
 
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
@@ -50,25 +54,6 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// Helper to delete a WhatsApp message (Revoke / Delete for everyone)
-async function deleteWhatsAppMessage(messageId) {
-  try {
-    await axios.delete(
-      `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
-        data: {
-          messaging_product: 'whatsapp',
-          status: 'deleted',
-          message_id: messageId
-        }
-      }
-    );
-  } catch (err) {
-    // Sometimes deletion fails if message is too old, ignore safely
-  }
-}
-
 async function sendButtons(to) {
   await axios.post(
     `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
@@ -78,7 +63,9 @@ async function sendButtons(to) {
       type: 'interactive',
       interactive: {
         type: 'list',
-        body: { text: '*Attendance*' },
+        body: {
+          text: '*Attendance*',
+        },
         action: {
           button: 'Select Shift',
           sections: [
@@ -102,27 +89,22 @@ async function sendButtons(to) {
   );
 }
 
-// Native One-Tap Location Request Message (Returns message_id so we can delete it later)
+// Native One-Tap Location Request Message
 async function requestLocation(to) {
-  try {
-    const res = await axios.post(
-      `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: 'whatsapp',
-        to,
-        type: 'interactive',
-        interactive: {
-          type: 'location_request_message',
-          body: { text: '📍 Please tap the button below to share your current location for attendance:' },
-          action: { name: 'send_location' },
-        },
+  await axios.post(
+    `https://graph.facebook.com/v20.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: 'whatsapp',
+      to,
+      type: 'interactive',
+      interactive: {
+        type: 'location_request_message',
+        body: { text: '📍 Please tap the button below to share your current location for attendance:' },
+        action: { name: 'send_location' },
       },
-      { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
-    );
-    return res.data?.messages?.[0]?.id || null;
-  } catch (err) {
-    return null;
-  }
+    },
+    { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
+  );
 }
 
 async function sendText(to, text) {
@@ -182,6 +164,7 @@ app.post('/webhook', async (req, res) => {
     const dateStr = now.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'numeric', day: 'numeric' });
     const currentHour = parseInt(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }));
 
+    // Handle Leave options directly
     if (buttonId === 'morning_leave' || buttonId === 'evening_leave') {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
@@ -204,6 +187,7 @@ app.post('/webhook', async (req, res) => {
       return;
     }
 
+    // Restriction checks
     const fullLeaveMarked = await getCellValue(employee.tab, row, 'E');
     if (fullLeaveMarked === 'TRUE') {
       return sendText(from, `⚠️ You are on *Full Day Leave* today (Date: *${dateStr}*)!`);
@@ -222,26 +206,25 @@ app.post('/webhook', async (req, res) => {
     const existing = await getCellValue(employee.tab, row, column);
     if (existing) return sendText(from, `⚠️ Already marked at ${existing}. Contact admin to fix.`);
 
-    // Request Location and get the bot message ID so we can delete it later
-    const sentMessageId = await requestLocation(from);
+    // Save selection temporarily so we know what they chose when location arrives
+    pendingSelections[from] = { buttonId, column, row };
 
-    // Save selection temporarily along with bot's prompt message ID
-    pendingSelections[from] = { buttonId, column, row, sentMessageId };
+    // Request Location now using native one-tap button
+    await requestLocation(from);
     return;
   }
 
-  // 3. If user shares location
+  // 3. If user shares location after clicking the location request button
   if (message.type === 'location') {
     const selection = pendingSelections[from];
     if (!selection) {
       return sendText(from, "⚠️ Please select your shift first by sending a message or clicking options.");
     }
 
-    const { column, row, sentMessageId } = selection;
+    const { column, row } = selection;
     const employeeLat = message.location.latitude;
     const employeeLon = message.location.longitude;
     const locationStr = `Lat: ${employeeLat}, Lon: ${employeeLon}`;
-    const userLocationMsgId = message.id; // User's shared location message ID
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', {
@@ -253,7 +236,7 @@ app.post('/webhook', async (req, res) => {
 
     delete pendingSelections[from];
 
-    // Execute everything concurrently: Update Google Sheets, Send Success Text, AND Delete the unwanted messages from chat
+    // Execute Google Sheets updates and WhatsApp reply concurrently for speed
     await Promise.all([
       sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
@@ -267,10 +250,7 @@ app.post('/webhook', async (req, res) => {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: [[locationStr]] },
       }),
-      sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`),
-      // Clean up chat: Delete bot's location prompt & user's location message
-      sentMessageId ? deleteWhatsAppMessage(sentMessageId) : Promise.resolve(),
-      deleteWhatsAppMessage(userLocationMsgId)
+      sendText(from, `✅ Attendance Marked: ${employee.name} *${timeStr}*`)
     ]);
   }
 });
